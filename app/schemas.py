@@ -1,31 +1,74 @@
-# app/schemas.py
 from pydantic import BaseModel, EmailStr
-from typing import Optional
-from .models import RoleType, ShiftType
+from typing import Optional, List
+from datetime import datetime
 
-# --- User Schemas ---
-class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-    role: RoleType
-    shift: Optional[ShiftType] = None
+# ==========================================
+# --- AUTH SCHEMAS ---
+# ==========================================
 
-class UserLogin(BaseModel):
+class UserBase(BaseModel):
+    username: str
     email: EmailStr
+    role: str = "Operator"
+
+class UserCreate(UserBase):
     password: str
+
+class UserResponse(UserBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class Token(BaseModel):
     access_token: str
     token_type: str
+    role: str
+    username: str
 
-# --- Vendor/Material Schemas ---
-class VendorCreate(BaseModel):
-    name: str
-    contact_email: Optional[EmailStr] = None
+class TokenData(BaseModel):
+    username: Optional[str] = None
+    role: Optional[str] = None
 
-class MaterialBatchCreate(BaseModel):
-    batch_code: str
-    material_name: str
-    vendor_id: int
-    quantity_kg: float
+
+# ==========================================
+# --- INTELLIGENCE & ML SCHEMAS ---
+# ==========================================
+
+class MLPredictionInput(BaseModel):
+    drying_time: float
+    milling_speed: float
+    acid_ph: float
+
+    class Config:
+        extra = "forbid"   # ✅ blocks old fields like "temperature"
+
+
+class MLPredictionOutput(BaseModel):
+    quality_score: float
+    status: str
+    recommendation: Optional[str] = "Proceed with Batch."
+
+
+# ==========================================
+# --- NOTIFICATION SCHEMAS ---
+# ==========================================
+
+class NotificationOut(BaseModel):
+    id: int
+    message: str
+    is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DashboardSummary(BaseModel):
+    active_batches: int
+    material_alerts: int
+    plant_health: float
+    production_rate: float 
+    status: str
+    recent_batches: List[dict]
