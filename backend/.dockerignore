@@ -1,0 +1,21 @@
+# Ignore python virtual environment
+venv/
+.venv/
+env/
+
+# Ignore compiled python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore local environment secrets (Docker will use its own env configuration)
+.env
+
+# Ignore git history
+.git
+.gitignore
+
+# Ignore IDE settings
+.vscode/
+.idea/

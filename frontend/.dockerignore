@@ -1,0 +1,16 @@
+# Ignore heavy node modules (Docker will install its own inside the container)
+node_modules/
+
+# Ignore local build outputs
+dist/
+build/
+
+# Ignore Vite/npm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.vite/
+
+# Ignore IDE and OS files
+.vscode/
+.DS_Store
