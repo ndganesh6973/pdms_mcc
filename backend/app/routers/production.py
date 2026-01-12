@@ -4,6 +4,10 @@ from app.database import get_db
 from app.models.production import ProductionBatch
 from app.models.materials import RawMaterialBatch 
 from pydantic import BaseModel
+from datetime import datetime
+
+# ✅ FIXED IMPORT: Using relative import to find utils.py in the same folder
+from .utils import log_activity 
 
 router = APIRouter(prefix="/production", tags=["Production Management"])
 
@@ -17,18 +21,16 @@ class ProductionStart(BaseModel):
 
 @router.get("/active-batches")
 def get_active_batches(db: Session = Depends(get_db)):
-    """Fetches batches currently on the production floor"""
     return db.query(ProductionBatch).filter(ProductionBatch.status == "ACTIVE").all()
 
 @router.post("/start-batch")
 def start_batch(data: ProductionStart, db: Session = Depends(get_db)):
-    """Deducts raw material and starts a new production batch"""
     if db.query(ProductionBatch).filter(ProductionBatch.batch_number == data.batch_number, ProductionBatch.status == "ACTIVE").first():
-        raise HTTPException(status_code=400, detail="Batch number already active.")
+        raise HTTPException(status_code=400, detail="Batch already active.")
 
     material = db.query(RawMaterialBatch).filter(RawMaterialBatch.material_name == data.raw_material_name).first()
     if not material or material.quantity_kg < data.quantity_to_use:
-        raise HTTPException(status_code=400, detail="Insufficient material stock.")
+        raise HTTPException(status_code=400, detail="Insufficient stock.")
 
     material.quantity_kg -= data.quantity_to_use 
     new_batch = ProductionBatch(
@@ -38,27 +40,27 @@ def start_batch(data: ProductionStart, db: Session = Depends(get_db)):
         quantity_used=data.quantity_to_use,
         shift=data.shift,
         status="ACTIVE",
-        authorized_by=data.authorized_by
+        authorized_by=data.authorized_by,
+        created_at=datetime.now()
     )
     db.add(new_batch)
+    
+    # ✅ REAL LOG: Tracking Start Activity
+    log_activity(db, f"Production Started: Batch {data.batch_number} ({data.phase})", data.authorized_by, "info")
+    
     db.commit()
-    return {"message": "Production started successfully"}
+    return {"message": "Started"}
 
-@router.post("/complete-batch/{batch_id}")
-def complete_batch(batch_id: int, db: Session = Depends(get_db)):
-    """
-    Stops production and moves the batch to the QC Lab Queue.
-    Inventory is NOT created here.
-    """
+@router.post("/end-batch/{batch_id}")
+def end_batch(batch_id: int, db: Session = Depends(get_db)):
     batch = db.query(ProductionBatch).filter(ProductionBatch.id == batch_id).first()
     if not batch:
-        raise HTTPException(status_code=404, detail="Batch not found")
+        raise HTTPException(status_code=404, detail="Not found")
     
-    try:
-        # Move to QC Queue
-        batch.status = "PENDING_QC" 
-        db.commit()
-        return {"message": f"Batch {batch.batch_number} moved to QC Lab for testing."}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+    batch.status = "PENDING_QC" 
+    
+    # ✅ REAL LOG: Tracking Phase Completion
+    log_activity(db, f"Batch {batch.batch_number} completed production and moved to QC", batch.authorized_by, "success")
+    
+    db.commit()
+    return {"message": "Moved to QC Lab"}

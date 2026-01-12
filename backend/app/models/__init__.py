@@ -5,4 +5,4 @@ from .intelligence import Anomaly, Notification
 from .production import ProductionBatch
 from .inventory import Inventory
 from .qc import QCRecord
-
+from .activity import ActivityLog

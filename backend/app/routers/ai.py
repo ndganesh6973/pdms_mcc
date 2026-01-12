@@ -1,25 +1,24 @@
 import os
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from groq import Groq
 from dotenv import load_dotenv
+from app import database, models
 
-# Load the .env file from the backend folder
+# Load environment variables
 load_dotenv()
 
-# 1. Setup Router
 router = APIRouter(
     prefix="/ai",
-    tags=["AI Assistant"]
+    tags=["GenAI Assistant"]
 )
 
 class AIQuery(BaseModel):
     question: str
 
-# 2. Configure Groq via Environment Variable
+# Configure Groq
 API_KEY = os.getenv("GROQ_API_KEY")
-
-# Initialize the client only if the key exists
 client = None
 if API_KEY:
     try:
@@ -30,30 +29,46 @@ else:
     print("⚠️ WARNING: GROQ_API_KEY not found in .env file")
 
 @router.post("/ask")
-def ask_ai(query: AIQuery):
-    # Check if client or key is missing
+def ask_ai(query: AIQuery, db: Session = Depends(database.get_db)):
     if not client:
-        return {"answer": "Error: Groq API Key is missing or invalid in your .env file."}
+        raise HTTPException(status_code=500, detail="Groq API Key is missing or invalid.")
 
     try:
-        # 3. Send request to Groq (Using Llama 3 model)
+        # 1. FETCH PLANT CONTEXT (Make the AI smart about YOUR data)
+        active_batches = db.query(models.production.ProductionBatch).filter(
+            models.production.ProductionBatch.status == "ACTIVE"
+        ).count()
+        
+        pending_qc = db.query(models.production.ProductionBatch).filter(
+            models.production.ProductionBatch.status == "PENDING_QC"
+        ).count()
+
+        # 2. DEFINE SYSTEM PROMPT
+        system_content = f"""
+        You are the 'MCC Intelligent Assistant'. 
+        You have access to the Plant Data Management System (PDMS).
+        Current Plant Status:
+        - Active Production Batches: {active_batches}
+        - Batches Waiting for QC: {pending_qc}
+        
+        Technical Knowledge: 
+        MCC manufacturing involves Pre-treatment, Acid Hydrolysis, Washing, Spray Drying, and Milling.
+        Standard pH for hydrolysis is usually 1.5 - 2.5. 
+        Answer professionally and prioritize plant safety and quality standards.
+        """
+
+        # 3. CALL GROQ (Llama 3.3)
         chat_completion = client.chat.completions.create(
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant for a Plant Data Management System (PDMS). Answer questions briefly and professionally."
-                },
-                {
-                    "role": "user",
-                    "content": query.question
-                }
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": query.question}
             ],
             model="llama-3.3-70b-versatile",
+            temperature=0.7,
         )
 
-        # 4. Get Answer
         return {"answer": chat_completion.choices[0].message.content}
 
     except Exception as e:
-        print(f"REAL ERROR: {e}")
-        return {"answer": f"TECHNICAL ERROR: {str(e)}"}
+        print(f"AI Router Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

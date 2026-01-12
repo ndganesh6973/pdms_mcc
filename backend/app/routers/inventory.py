@@ -4,6 +4,9 @@ from app.database import get_db
 from app.models.inventory import Inventory
 from datetime import datetime
 
+# ✅ FIXED IMPORT: Matches the log_activity name in utils.py
+from .utils import log_activity 
+
 router = APIRouter(prefix="/inventory", tags=["Inventory & Logistics"])
 
 @router.get("/finished-goods")
@@ -26,6 +29,10 @@ def move_to_dispatch(batch_no: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Batch not found")
     
     item.status = "In Dispatch Area" 
+    
+    # ✅ REAL LOG: Tracking Internal Movement
+    log_activity(db, f"LOGISTICS: Batch {batch_no} moved to Dispatch Area", "Logistics_Staff", "info")
+    
     db.commit()
     return {"message": f"Batch {batch_no} moved to Dispatch Area for staging"}
 
@@ -38,8 +45,13 @@ def final_dispatch(batch_no: str, db: Session = Depends(get_db)):
     
     item.status = "Dispatched"
     item.dispatched_at = datetime.now() 
+    
+    # ✅ REAL LOG: Final Step of A to Z (Dispatch)
+    log_activity(db, f"DISPATCHED: Batch {batch_no} shipped to customer", "Dispatch_Head", "success")
+    
     db.commit()
     return {"message": f"Batch {batch_no} successfully sent to customer"}
+
 @router.get("/dispatch-history")
 def get_dispatch_history(db: Session = Depends(get_db)):
     """Fetches all batches that have been officially shipped"""

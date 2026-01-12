@@ -16,8 +16,12 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     id: int
-    created_at: datetime
+    shift: Optional[str] = None  
+    is_active: bool = True       
+    created_at: Optional[datetime] = None 
 
+    class Config:
+        from_attributes = True
     class Config:
         from_attributes = True
 
