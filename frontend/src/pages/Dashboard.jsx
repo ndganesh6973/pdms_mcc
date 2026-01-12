@@ -2,189 +2,154 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 import Sidebar from '../components/Sidebar';
 import { 
-  Box, Card, Typography, Chip, Table, TableBody, 
-  TableCell, TableContainer, TableRow, Skeleton, 
-  Button, IconButton, Badge, Menu, MenuItem, Avatar, Divider
+  Box, Typography, Grid, Card, CardActionArea, Paper, Divider, Chip, List, ListItem, ListItemText 
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
+import { useNavigate } from 'react-router-dom';
 import { 
-  Activity, AlertTriangle, CheckCircle, Zap, 
-  ShieldCheck, Bell, Settings, LogOut 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
+} from 'recharts';
+import { 
+  Database, Settings, ClipboardList, Truck, 
+  ShieldCheck, Clock, Activity, ListFilter
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 function Dashboard() {
-  const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState({
-    active_batches: 0,
-    material_alerts: 0,
-    plant_health: 0,
-    production_rate: 0,
-    status: "CONNECTING...",
-    recent_batches: [] 
+  const navigate = useNavigate();
+  const [data, setData] = useState({
+    summary: { production: {}, qc: {}, inventory: {}, dispatch: {} },
+    analytics: [],
+    logs: [], // This will hold your real notifications
+    loading: true
   });
-  
-  const [analytics, setAnalytics] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [anchorEl, setAnchorEl] = useState(null);
 
-  // Get Session Data
-  const username = localStorage.getItem('username') || 'User';
-  const userRole = localStorage.getItem('userRole') || 'Operator';
-  const isAdmin = userRole.toLowerCase() === 'admin';
+  const colors = {
+    primary: "#4e73df",
+    success: "#1cc88a",
+    info: "#36b9cc",
+    warning: "#f6c23e",
+    danger: "#e74a3b",
+    bg: "#f8f9fc"
+  };
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchAll = async () => {
       try {
-        setLoading(true);
-        // 1. Fetch KPI Summary
-        const summaryRes = await api.get('/dashboard/summary');
-        setSummary(summaryRes.data);
-
-        // 2. Fetch Chart Analytics
-        const analyticsRes = await api.get('/dashboard/analytics');
-        setAnalytics(analyticsRes.data);
-
-        // 3. Fetch Notifications
-        const notifyRes = await api.get('/dashboard/notifications');
-        setNotifications(notifyRes.data);
+        const [summaryRes, analyticsRes, logsRes] = await Promise.all([
+          api.get('/dashboard/summary'),
+          api.get('/dashboard/analytics'),
+          api.get('/dashboard/notifications') // Fetching real logs
+        ]);
         
-        setLoading(false);
+        setData({ 
+          summary: summaryRes.data, 
+          analytics: analyticsRes.data, 
+          logs: logsRes.data || [], 
+          loading: false 
+        });
       } catch (err) {
-        console.error("Dashboard sync error:", err);
-        setLoading(false);
+        console.error("Sync Error", err);
+        setData(prev => ({ ...prev, loading: false }));
       }
     };
-
-    fetchDashboardData();
+    fetchAll();
   }, []);
 
-  // Notification Menu Handlers
-  const handleOpenAlerts = (event) => setAnchorEl(event.currentTarget);
-  const handleCloseAlerts = () => setAnchorEl(null);
-
   return (
-    <Box sx={{ display: 'flex', bgcolor: '#F4F7FE', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', bgcolor: colors.bg, minHeight: '100vh', width: '100vw', overflow: 'hidden' }}>
       <Sidebar />
-      <Box component="main" sx={{ flexGrow: 1, p: 4 }}>
+      
+      {/* MAIN CONTENT AREA */}
+      <Box component="main" sx={{ flexGrow: 1, p: 3, width: '100%', overflowX: 'hidden' }}>
         
-        {/* HEADER BAR: Search, Notifications, Profile */}
-        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* HEADER SECTION */}
+        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box>
-            <Typography variant="h4" fontWeight="900" color="#1E293B">
-              Welcome, {username}!
+            <Typography variant="h4" fontWeight="900" color="#5a5c69" sx={{ letterSpacing: '-1px' }}>
+              CENTRAL COMMAND
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-              <Chip 
-                icon={isAdmin ? <ShieldCheck size={14} /> : null}
-                label={userRole.toUpperCase()} 
-                size="small" 
-                color={isAdmin ? "primary" : "default"} 
-                sx={{ fontWeight: 'bold' }} 
-              />
-              <Typography variant="body2" color="text.secondary">
-                Plant Status: <b style={{ color: '#4CAF50' }}>{summary.status}</b>
-              </Typography>
-            </Box>
+            <Typography variant="body2" color="text.secondary" fontWeight="700">
+              SYSTEM ONLINE • {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </Typography>
           </Box>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {/* Notification Bell */}
-            <IconButton onClick={handleOpenAlerts}>
-              <Badge badgeContent={notifications.filter(n => !n.is_read).length} color="error">
-                <Bell size={24} color="#1E293B" />
-              </Badge>
-            </IconButton>
-
-            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseAlerts} sx={{ mt: 1 }}>
-              <Typography sx={{ px: 2, py: 1, fontWeight: 'bold' }}>Alerts Center</Typography>
-              <Divider />
-              {notifications.length > 0 ? (
-                notifications.map((n) => (
-                  <MenuItem key={n.id} onClick={handleCloseAlerts} sx={{ maxWidth: 300, py: 1.5 }}>
-                    <Box>
-                      <Typography variant="body2" fontWeight="600">{n.message}</Typography>
-                      <Typography variant="caption" color="text.secondary">{n.timestamp}</Typography>
-                    </Box>
-                  </MenuItem>
-                ))
-              ) : (
-                <MenuItem>No new notifications</MenuItem>
-              )}
-            </Menu>
-
-            {/* Admin Controls */}
-            {isAdmin && (
-              <Button variant="contained" color="error" startIcon={<AlertTriangle size={18} />} sx={{ borderRadius: '10px' }}>
-                EMERGENCY STOP
-              </Button>
-            )}
-            
-            <Avatar sx={{ bgcolor: '#7b1fa2', fontWeight: 'bold' }}>{username[0].toUpperCase()}</Avatar>
-          </Box>
+          <Chip 
+            icon={<ShieldCheck size={16} />} 
+            label="ENCRYPTED SESSION" 
+            sx={{ fontWeight: '900', bgcolor: 'white', border: '1px solid #e3e6f0', color: colors.primary }} 
+          />
         </Box>
 
-        {/* KPI CARDS: Real-time Data */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <KPICard title="Active Batches" value={loading ? <Skeleton width={40} /> : summary.active_batches} color="#E8F2FF" icon={<Activity color="#2196F3"/>} />
-          <KPICard title="Material Alerts" value={loading ? <Skeleton width={40} /> : summary.material_alerts} color="#FFF4E5" icon={<AlertTriangle color="#FF9800"/>} />
-          <KPICard title="Plant Health" value={loading ? <Skeleton width={40} /> : `${summary.plant_health}%`} color="#EBF9F1" icon={<CheckCircle color="#4CAF50"/>} />
-          <KPICard title="Production Rate" value={loading ? <Skeleton width={40} /> : `${summary.production_rate} kg/h`} color="#F4F4F4" icon={<Zap color="#607D8B"/>} />
+        {/* 1. TOP CARDS (Row of 4) */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <NavCard title="Production" icon={<Settings size={26} color={colors.primary}/>} path="/production" active={data.summary.production?.active || 0} waiting={data.summary.production?.waiting || 0} color={colors.primary} />
+          {/* CORRECTED PATH: /qc matches App.js lowercase route */}
+          <NavCard title="Quality Control" icon={<ClipboardList size={26} color={colors.success}/>} path="/qc" active={data.summary.qc?.active || 0} waiting={data.summary.qc?.waiting || 0} color={colors.success} />
+          <NavCard title="Inventory" icon={<Database size={26} color={colors.info}/>} path="/inventory" active={data.summary.inventory?.active || 0} waiting={data.summary.inventory?.waiting || 0} color={colors.info} />
+          <NavCard title="Dispatch" icon={<Truck size={26} color={colors.warning}/>} path="/dispatch" active={data.summary.dispatch?.active || 0} waiting={data.summary.dispatch?.waiting || 0} color={colors.warning} />
         </Grid>
 
-        <Grid container spacing={3}>
-          {/* PRODUCTION CHART: Analytics Data */}
-          <Grid item xs={12} md={8}>
-            <Card sx={{ p: 3, borderRadius: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.02)', border: 'none' }}>
-              <Typography variant="h6" fontWeight="800" mb={3} color="#1E293B">Yield Forecast vs Actual</Typography>
-              <Box sx={{ width: '100%', height: 320 }}>
+        {/* 2. CORE LOGS & ANALYTICS (Perfect 50/50 Split) */}
+        <Grid container spacing={2} sx={{ height: 'calc(100vh - 250px)' }}>
+          
+          {/* DAILY PRODUCTION LOG (LEFT HALF) */}
+          <Grid item xs={12} md={6} sx={{ height: '100%' }}>
+            <Paper sx={{ p: 3, borderRadius: 3, border: '1px solid #e3e6f0', boxShadow: 'none', height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Activity size={20} color={colors.primary} />
+                <Typography variant="h6" fontWeight="800" color="#5a5c69">Daily Production Yield</Typography>
+              </Box>
+              <Box sx={{ flexGrow: 1, width: '100%' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics}>
-                    <defs>
-                      <linearGradient id="colorOutput" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#7b1fa2" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#7b1fa2" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="date" hide />
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                    <Area type="monotone" dataKey="output" stroke="#7b1fa2" strokeWidth={3} fillOpacity={1} fill="url(#colorOutput)" />
-                  </AreaChart>
+                  <BarChart data={data.analytics} margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e3e6f0" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#858796', fontSize: 11, fontWeight: 'bold'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#858796', fontSize: 11}} />
+                    <Tooltip cursor={{fill: '#f8f9fc'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
+                    <Bar dataKey="output" radius={[6, 6, 0, 0]} barSize={45}>
+                      {data.analytics.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={colors.primary} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </Box>
-            </Card>
+            </Paper>
           </Grid>
 
-          {/* LIVE MONITOR: Recent Batches */}
-          <Grid item xs={12} md={4}>
-            <Card sx={{ p: 3, borderRadius: '20px', minHeight: 400, boxShadow: '0 10px 30px rgba(0,0,0,0.02)', border: 'none' }}>
-              <Typography variant="h6" fontWeight="800" mb={2} color="#1E293B">Live Batch Monitor</Typography>
-              <TableContainer sx={{ maxHeight: 320 }}>
-                <Table size="small" stickyHeader>
-                  <TableBody>
-                    {summary.recent_batches?.length > 0 ? (
-                      summary.recent_batches.map((batch, i) => (
-                        <TableRow key={i} hover>
-                          <TableCell sx={{ border: 0, px: 0, py: 2 }}>
-                            <Typography variant="body2" fontWeight="700" color="#1E293B">{batch.batch_number}</Typography>
-                            <Typography variant="caption" color="text.secondary">{batch.phase}</Typography>
-                          </TableCell>
-                          <TableCell sx={{ border: 0 }} align="right">
-                            <Chip label="ACTIVE" size="small" sx={{ bgcolor: '#EBF9F1', color: '#4CAF50', fontWeight: '900', fontSize: '0.65rem' }} />
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={2} align="center" sx={{ border: 0, py: 10 }}>
-                          <Typography variant="body2" color="text.secondary">No active batches detected.</Typography>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Card>
+          {/* A to Z ACTIVITY LOG (RIGHT HALF) */}
+          <Grid item xs={12} md={6} sx={{ height: '100%' }}>
+            <Paper sx={{ p: 3, borderRadius: 3, border: '1px solid #e3e6f0', boxShadow: 'none', height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <ListFilter size={20} color={colors.primary} />
+                    <Typography variant="h6" fontWeight="800" color="#5a5c69">A to Z Activity Log</Typography>
+                </Box>
+                <Chip label="Real-time" size="small" sx={{ fontWeight: 'bold', fontSize: '0.65rem', color: colors.success, bgcolor: '#e1f9ed' }} />
+              </Box>
+              <Box sx={{ 
+                flexGrow: 1, 
+                overflowY: 'auto', 
+                pr: 1, 
+                '&::-webkit-scrollbar': { width: '6px' }, 
+                '&::-webkit-scrollbar-thumb': { bgcolor: '#d1d3e2', borderRadius: '10px' } 
+              }}>
+                <List disablePadding>
+                  {/* Map through real logs if they exist, otherwise show fallback */}
+                  {data.logs.length > 0 ? data.logs.map((log, index) => (
+                    <FullLogItem 
+                      key={index}
+                      time={new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 
+                      user={log.user || "System"} 
+                      action={log.message} 
+                      color={log.type === 'alert' ? colors.danger : colors.primary} 
+                    />
+                  )) : (
+                    <Box sx={{ textAlign: 'center', mt: 10, opacity: 0.5 }}>
+                        <Typography variant="body2">No recent activities found.</Typography>
+                    </Box>
+                  )}
+                </List>
+              </Box>
+            </Paper>
           </Grid>
         </Grid>
       </Box>
@@ -192,22 +157,49 @@ function Dashboard() {
   );
 }
 
-function KPICard({ title, value, color, icon }) {
+// --------------------------------------------------------------------------------------
+
+function NavCard({ title, icon, path, active, waiting, color }) {
+  const navigate = useNavigate();
   return (
     <Grid item xs={12} sm={6} md={3}>
-      <Card sx={{ p: 3, borderRadius: '20px', bgcolor: color, border: 'none', boxShadow: 'none' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Box>
-            <Typography variant="body2" color="text.secondary" fontWeight="700" sx={{ mb: 0.5 }}>{title}</Typography>
-            <Typography variant="h4" fontWeight="900" color="#1E293B">{value}</Typography>
+      <Card sx={{ borderRadius: 2, border: '1px solid #e3e6f0', boxShadow: 'none', transition: '0.2s', '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 .3rem .8rem rgba(0,0,0,.05)' } }}>
+        <CardActionArea onClick={() => navigate(path)} sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+            <Box sx={{ p: 1, bgcolor: `${color}10`, borderRadius: 1.5, display: 'flex' }}>{icon}</Box>
+            <Typography variant="subtitle2" fontWeight="900" color="#5a5c69">{title.toUpperCase()}</Typography>
           </Box>
-          <Box sx={{ p: 1.5, bgcolor: '#FFF', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
-            {icon}
+          <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
+            <Box align="center">
+              <Typography variant="h5" fontWeight="900" color="#1E293B">{active}</Typography>
+              <Typography variant="caption" color="text.secondary" fontWeight="800" sx={{fontSize: '0.6rem'}}>ACTIVE</Typography>
+            </Box>
+            <Divider orientation="vertical" flexItem />
+            <Box align="center">
+              <Typography variant="h5" fontWeight="900" color={color}>{waiting}</Typography>
+              <Typography variant="caption" color="text.secondary" fontWeight="800" sx={{fontSize: '0.6rem'}}>QUEUED</Typography>
+            </Box>
           </Box>
-        </Box>
+        </CardActionArea>
       </Card>
     </Grid>
   );
+}
+
+function FullLogItem({ time, user, action, color }) {
+    return (
+        <ListItem sx={{ px: 0, py: 1.2, borderBottom: '1px solid #f8f9fc' }}>
+            <Box sx={{ width: 4, height: 32, bgcolor: color, borderRadius: 1.5, mr: 2, flexShrink: 0 }} />
+            <ListItemText 
+                primary={<Typography variant="body2" fontWeight="800" color="#4a4b57" sx={{fontSize: '0.85rem'}}>{action}</Typography>}
+                secondary={
+                    <Typography variant="caption" color="text.secondary" sx={{fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.3}}>
+                        <Clock size={11} /> {time} • <span style={{fontWeight: 'bold', color: '#858796'}}>{user.toUpperCase()}</span>
+                    </Typography>
+                }
+            />
+        </ListItem>
+    );
 }
 
 export default Dashboard;
